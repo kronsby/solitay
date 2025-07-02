@@ -31,7 +31,7 @@ fun PlayingCard(
             .padding(4.dp),
         contentAlignment = Alignment.TopStart
     ) {
-        if (card.isFaceUp) {
+        if (card.isFaceUp.value) {
             Box(modifier = Modifier.fillMaxSize()) {
                 // Top left corner: rank
                 Text(

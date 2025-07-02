@@ -33,7 +33,7 @@ class GameState {
         for (i in 0..6) {
             for (j in 0..i) {
                 val card = deck.removeAt(0)
-                if (j == i) card.isFaceUp = true
+                if (j == i) card.isFaceUp.value = true
                 tableau[i].add(card)
             }
         }

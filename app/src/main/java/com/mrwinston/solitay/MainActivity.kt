@@ -148,11 +148,11 @@ fun SolitaireGame(modifier: Modifier = Modifier) {
                     onStockClick = {
                         if (stock.isNotEmpty()) {
                             val card = stock.removeAt(stock.lastIndex)
-                            card.isFaceUp = true
+                            card.isFaceUp.value = true
                             waste.add(card)
                         } else {
                             stock.addAll(waste.reversed())
-                            stock.forEach { it.isFaceUp = false }
+                            stock.forEach { it.isFaceUp.value = false }
                             waste.clear()
                         }
                     },
@@ -319,8 +319,16 @@ private fun performMove(
     targetList.addAll(draggedCards.toList())
 
     // Flip card in source tableau pile if needed
-    if (sourcePile.type == CardPileType.TABLEAU && sourceList.isNotEmpty() && !sourceList.last().isFaceUp) {
-        sourceList.last().isFaceUp = true
+    Log.d("Solitaire", "Checking flip condition for sourcePile: ${sourcePile.type}")
+    if (sourcePile.type == CardPileType.TABLEAU && sourceList.isNotEmpty()) {
+        val cardToFlip = sourceList.last()
+        Log.d("Solitaire", "Card to potentially flip: $cardToFlip, isFaceUp: ${cardToFlip.isFaceUp.value}")
+        if (!cardToFlip.isFaceUp.value) {
+            cardToFlip.isFaceUp.value = true
+            Log.d("Solitaire", "Card flipped: $cardToFlip, new isFaceUp: ${cardToFlip.isFaceUp.value}")
+        } else {
+            Log.d("Solitaire", "Card already face up or not a tableau pile.")
+        }
     }
 }
 
@@ -430,7 +438,7 @@ internal fun TableauPileView(
                         .width(cardWidth)
                         .height(cardHeight)
                         .pointerInput(card) {
-                            if (card.isFaceUp) {
+                            if (card.isFaceUp.value) {
                                 detectDragGestures(
                                     onDragStart = { touchOffset -> onCardDragStart(card, cardPositionInWindow, touchOffset) },
                                     onDrag = { change, dragAmount ->

@@ -1,5 +1,8 @@
 package com.mrwinston.solitay.model
 
+import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.mutableStateOf
+
 enum class Suit {
     HEARTS, DIAMONDS, CLUBS, SPADES
 }
@@ -11,7 +14,7 @@ enum class Rank {
 data class Card(
     val suit: Suit,
     val rank: Rank,
-    var isFaceUp: Boolean = false
+    val isFaceUp: MutableState<Boolean> = mutableStateOf(false)
 ) {
     val isRed: Boolean
         get() = suit == Suit.HEARTS || suit == Suit.DIAMONDS
