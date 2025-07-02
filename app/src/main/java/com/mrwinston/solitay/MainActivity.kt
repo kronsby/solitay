@@ -12,10 +12,10 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
+import androidx.compose.material3.Button
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
-import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -73,11 +73,7 @@ internal data class CardPile(
 
 @Composable
 fun SolitaireGame(modifier: Modifier = Modifier) {
-    val gameState = remember { GameState() }
-    val stock = remember { gameState.stock.toMutableStateList() }
-    val waste = remember { gameState.waste.toMutableStateList() }
-    val foundations = remember { gameState.foundations.map { it.toMutableStateList() }.toMutableStateList() }
-    val tableau = remember { gameState.tableau.map { it.toMutableStateList() }.toMutableStateList() }
+    var gameState by remember { mutableStateOf(GameState()) }
 
     var dragInfo by remember { mutableStateOf<DragInfo?>(null) }
     val dragOffset = remember { Animatable(Offset.Zero, Offset.VectorConverter) }
@@ -86,10 +82,13 @@ fun SolitaireGame(modifier: Modifier = Modifier) {
     val pileLayouts = remember { mutableMapOf<CardPile, Rect>() }
     var targetPile by remember { mutableStateOf<CardPile?>(null) }
 
+    val history = remember { mutableStateListOf(gameState) }
+    var historyIndex by remember { mutableStateOf(0) }
+
     val onCardDragStart: (Card, CardPile, Offset, Offset) -> Unit = { card, sourcePile, cardPosition, touchOffset ->
         val draggedCards = when (sourcePile.type) {
             CardPileType.TABLEAU -> {
-                val pile = tableau[sourcePile.index]
+                val pile = gameState.tableau[sourcePile.index]
                 val cardIndex = pile.indexOf(card)
                 if (cardIndex != -1) pile.subList(cardIndex, pile.size).toList() else emptyList()
             }
@@ -111,26 +110,33 @@ fun SolitaireGame(modifier: Modifier = Modifier) {
         }
     }
 
+    val updateGameState: (GameState) -> Unit = { newState ->
+        gameState = newState
+        if (historyIndex < history.lastIndex) {
+            history.removeRange(historyIndex + 1, history.size)
+        }
+        history.add(newState)
+        historyIndex++
+    }
+
     val onCardDragEnd: () -> Unit = {
         coroutineScope.launch {
-            if (targetPile != null && dragInfo?.let {
-                    isValidMove(
-                        it.draggedCards,
-                        targetPile!!,
-                        foundations,
-                        tableau
-                    )
-                } == true) {
-                dragInfo?.let {
-                    performMove(
-                        it.draggedCards,
-                        it.sourcePile,
-                        targetPile!!,
-                        waste,
-                        foundations,
-                        tableau
-                    )
-                }
+            val currentTarget = targetPile
+            val currentDragInfo = dragInfo
+            if (currentTarget != null && currentDragInfo != null && isValidMove(
+                    currentDragInfo.draggedCards,
+                    currentTarget,
+                    gameState.foundations,
+                    gameState.tableau
+                )
+            ) {
+                val newGameState = performMove(
+                    gameState,
+                    currentDragInfo.draggedCards,
+                    currentDragInfo.sourcePile,
+                    currentTarget
+                )
+                updateGameState(newGameState)
                 dragInfo = null
                 dragOffset.snapTo(Offset.Zero)
             } else {
@@ -141,6 +147,21 @@ fun SolitaireGame(modifier: Modifier = Modifier) {
             targetPile = null
         }
     }
+
+    val undo: () -> Unit = {
+        if (historyIndex > 0) {
+            historyIndex--
+            gameState = history[historyIndex]
+        }
+    }
+
+    val redo: () -> Unit = {
+        if (historyIndex < history.lastIndex) {
+            historyIndex++
+            gameState = history[historyIndex]
+        }
+    }
+
     var boxBoundsInWindow by remember { mutableStateOf<Rect?>(null) }
     BoxWithConstraints(
         modifier = modifier
@@ -163,19 +184,21 @@ fun SolitaireGame(modifier: Modifier = Modifier) {
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 StockPileView(
-                    cards = stock,
+                    cards = gameState.stock,
                     cardWidth = cardWidth,
                     cardHeight = cardHeight,
                     onStockClick = {
-                        if (stock.isNotEmpty()) {
-                            val card = stock.removeAt(stock.lastIndex)
+                        val newGameState = gameState.deepCopy()
+                        if (newGameState.stock.isNotEmpty()) {
+                            val card = newGameState.stock.removeAt(newGameState.stock.lastIndex)
                             card.isFaceUp.value = true
-                            waste.add(card)
+                            newGameState.waste.add(card)
                         } else {
-                            stock.addAll(waste.reversed())
-                            stock.forEach { it.isFaceUp.value = false }
-                            waste.clear()
+                            newGameState.stock.addAll(newGameState.waste.reversed())
+                            newGameState.stock.forEach { it.isFaceUp.value = false }
+                            newGameState.waste.clear()
                         }
+                        updateGameState(newGameState)
                     },
                     modifier = Modifier.onGloballyPositioned {
                         pileLayouts[CardPile(CardPileType.STOCK)] = it.boundsInWindow()
@@ -184,7 +207,7 @@ fun SolitaireGame(modifier: Modifier = Modifier) {
                 )
 
                 WastePileView(
-                    cards = waste,
+                    cards = gameState.waste,
                     cardWidth = cardWidth,
                     cardHeight = cardHeight,
                     dragInfo = dragInfo,
@@ -199,7 +222,7 @@ fun SolitaireGame(modifier: Modifier = Modifier) {
 
                 Spacer(modifier = Modifier.width(16.dp))
 
-                foundations.forEachIndexed { index, pile ->
+                gameState.foundations.forEachIndexed { index, pile ->
                     FoundationPileView(
                         cards = pile,
                         cardWidth = cardWidth,
@@ -218,7 +241,7 @@ fun SolitaireGame(modifier: Modifier = Modifier) {
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                tableau.forEachIndexed { index, pile ->
+                gameState.tableau.forEachIndexed { index, pile ->
                     TableauPileView(
                         cards = pile,
                         cardWidth = cardWidth,
@@ -271,6 +294,21 @@ fun SolitaireGame(modifier: Modifier = Modifier) {
                 }
             }
         }
+        // Undo/Redo buttons
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .align(Alignment.BottomCenter)
+                .padding(16.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly
+        ) {
+            Button(onClick = undo, enabled = historyIndex > 0) {
+                Text("Undo")
+            }
+            Button(onClick = redo, enabled = historyIndex < history.lastIndex) {
+                Text("Redo")
+            }
+        }
     }
 }
 
@@ -319,47 +357,40 @@ private fun isValidMove(
 }
 
 private fun performMove(
+    currentState: GameState,
     draggedCards: List<Card>,
     sourcePile: CardPile,
-    targetPile: CardPile,
-    waste: SnapshotStateList<Card>,
-    foundations: SnapshotStateList<SnapshotStateList<Card>>,
-    tableau: SnapshotStateList<SnapshotStateList<Card>>
-) {
+    targetPile: CardPile
+): GameState {
+    val newGameState = currentState.deepCopy()
+
     val sourceList = when (sourcePile.type) {
-        CardPileType.WASTE -> waste
-        CardPileType.TABLEAU -> tableau[sourcePile.index]
-        else -> return // Should not happen
+        CardPileType.WASTE -> newGameState.waste
+        CardPileType.TABLEAU -> newGameState.tableau[sourcePile.index]
+        else -> return newGameState // Should not happen
     }
 
     val targetList = when (targetPile.type) {
-        CardPileType.FOUNDATION -> foundations[targetPile.index]
-        CardPileType.TABLEAU -> tableau[targetPile.index]
-        else -> return // Should not happen
+        CardPileType.FOUNDATION -> newGameState.foundations[targetPile.index]
+        CardPileType.TABLEAU -> newGameState.tableau[targetPile.index]
+        else -> return newGameState // Should not happen
     }
 
-    // Safely remove cards from the source list
-    if (sourcePile.type == CardPileType.TABLEAU) {
-        repeat(draggedCards.size) {
-            sourceList.removeAt(sourceList.lastIndex)
-        }
-    } else {
-        sourceList.removeAll(draggedCards)
-    }
-    targetList.addAll(draggedCards.toList())
+    // Find the card references in the new state
+    val draggedCardIds = draggedCards.map { it.suit to it.rank }
+    val cardsToMove = sourceList.filter { it.suit to it.rank in draggedCardIds }
+
+    sourceList.removeAll(cardsToMove)
+    targetList.addAll(cardsToMove)
 
     // Flip card in source tableau pile if needed
-    Log.d("Solitaire", "Checking flip condition for sourcePile: ${sourcePile.type}")
     if (sourcePile.type == CardPileType.TABLEAU && sourceList.isNotEmpty()) {
         val cardToFlip = sourceList.last()
-        Log.d("Solitaire", "Card to potentially flip: $cardToFlip, isFaceUp: ${cardToFlip.isFaceUp.value}")
         if (!cardToFlip.isFaceUp.value) {
             cardToFlip.isFaceUp.value = true
-            Log.d("Solitaire", "Card flipped: $cardToFlip, new isFaceUp: ${cardToFlip.isFaceUp.value}")
-        } else {
-            Log.d("Solitaire", "Card already face up or not a tableau pile.")
         }
     }
+    return newGameState
 }
 
 @Composable

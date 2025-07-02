@@ -18,4 +18,8 @@ data class Card(
 ) {
     val isRed: Boolean
         get() = suit == Suit.HEARTS || suit == Suit.DIAMONDS
+
+    fun copy(isFaceUp: MutableState<Boolean> = mutableStateOf(this.isFaceUp.value)): Card {
+        return Card(suit, rank, isFaceUp)
+    }
 } 

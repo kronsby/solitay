@@ -1,6 +1,6 @@
 package com.mrwinston.solitay.model
 
-class GameState {
+class GameState(initialize: Boolean = true) {
     // Stock pile (where cards are drawn from)
     val stock = mutableListOf<Card>()
 
@@ -14,7 +14,9 @@ class GameState {
     val tableau = List(7) { mutableListOf<Card>() }
 
     init {
-        initializeGame()
+        if (initialize) {
+            initializeGame()
+        }
     }
 
     private fun initializeGame() {
@@ -41,4 +43,17 @@ class GameState {
         // Remaining cards go to stock
         stock.addAll(deck)
     }
-} 
+
+    fun deepCopy(): GameState {
+        val newGameState = GameState(false)
+        newGameState.stock.addAll(stock.map { it.copy() })
+        newGameState.waste.addAll(waste.map { it.copy() })
+        foundations.forEachIndexed { index, pile ->
+            newGameState.foundations[index].addAll(pile.map { it.copy() })
+        }
+        tableau.forEachIndexed { index, pile ->
+            newGameState.tableau[index].addAll(pile.map { it.copy() })
+        }
+        return newGameState
+    }
+}
