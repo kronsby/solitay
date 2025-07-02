@@ -90,7 +90,7 @@ fun SolitaireGame(modifier: Modifier = Modifier) {
             CardPileType.TABLEAU -> {
                 val pile = tableau[sourcePile.index]
                 val cardIndex = pile.indexOf(card)
-                if (cardIndex != -1) pile.subList(cardIndex, pile.size) else emptyList()
+                if (cardIndex != -1) pile.subList(cardIndex, pile.size).toList() else emptyList()
             }
             CardPileType.WASTE -> listOf(card)
             else -> emptyList()
@@ -308,8 +308,15 @@ private fun performMove(
         else -> return // Should not happen
     }
 
-    sourceList.removeAll(draggedCards)
-    targetList.addAll(draggedCards)
+    // Safely remove cards from the source list
+    if (sourcePile.type == CardPileType.TABLEAU) {
+        repeat(draggedCards.size) {
+            sourceList.removeAt(sourceList.lastIndex)
+        }
+    } else {
+        sourceList.removeAll(draggedCards)
+    }
+    targetList.addAll(draggedCards.toList())
 
     // Flip card in source tableau pile if needed
     if (sourcePile.type == CardPileType.TABLEAU && sourceList.isNotEmpty() && !sourceList.last().isFaceUp) {
