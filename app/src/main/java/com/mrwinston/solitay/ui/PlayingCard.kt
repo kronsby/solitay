@@ -2,58 +2,29 @@ package com.mrwinston.solitay.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Text
-import androidx.compose.runtime.*
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.mrwinston.solitay.model.Card
 import com.mrwinston.solitay.model.Rank
 import com.mrwinston.solitay.model.Suit
-import kotlin.math.roundToInt
 
 @Composable
 fun PlayingCard(
     card: Card,
     modifier: Modifier = Modifier,
-    onCardDragStart: (Card, startOffset: IntOffset) -> Unit = { _, _ -> },
-    onCardDrag: (Card, dragAmount: IntOffset) -> Unit = { _, _ -> },
-    onCardDragEnd: (Card, endOffset: IntOffset) -> Unit = { _, _ -> },
-    currentOffset: IntOffset = IntOffset(0, 0) // Parameter for the current drag offset
 ) {
     Box(
         modifier = modifier
-            .then( // Use .then() for conditional modifiers
-                if (card.isFaceUp) {
-                    // Apply drag detection only if the card is face up
-                    Modifier.pointerInput(card) { // Use the card as the key to restart detection for new cards
-                        detectDragGestures(
-                            onDragStart = { offset ->
-                                onCardDragStart(card, offset.toIntOffset()) // Report drag start and initial touch offset
-                            },
-                            onDragEnd = {
-                                onCardDragEnd(card, currentOffset)
-                            },
-                            onDragCancel = {
-                                onCardDragEnd(card, currentOffset)
-                            },
-                            onDrag = { change, dragAmount ->
-                                change.consume()
-                                onCardDrag(card, dragAmount.toIntOffset())
-                            }
-                        )
-                    }
-                } else {
-                    Modifier // Return empty Modifier if not face up (not draggable)
-                }
-            )
             .aspectRatio(0.7f) // Standard playing card ratio
             .background(Color.White)
             .border(1.dp, Color.Black)
@@ -89,9 +60,6 @@ fun PlayingCard(
         }
     }
 }
-
-// Helper extension function to convert Offset to IntOffset
-private fun androidx.compose.ui.geometry.Offset.toIntOffset() = IntOffset(x.roundToInt(), y.roundToInt())
 
 private fun getRankSymbol(rank: Rank): String {
     return when (rank) {
