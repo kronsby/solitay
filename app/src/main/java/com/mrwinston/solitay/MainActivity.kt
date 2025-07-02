@@ -441,12 +441,6 @@ internal fun TableauPileView(
     }
 }
 
-private fun Modifier.onGloballyPositioned(onPositioned: (Rect) -> Unit): Modifier {
-    return onGloballyPositioned { layoutCoordinates ->
-        onPositioned(layoutCoordinates.boundsInWindow())
-    }
-}
-
 private fun LayoutCoordinates.boundsInWindow(): Rect {
     val position = positionInWindow()
     val size = size
