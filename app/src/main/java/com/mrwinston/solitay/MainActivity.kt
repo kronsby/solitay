@@ -204,6 +204,7 @@ fun SolitaireGame(modifier: Modifier = Modifier) {
                         cards = pile,
                         cardWidth = cardWidth,
                         cardHeight = cardHeight,
+                        isTargeted = targetPile == CardPile(CardPileType.FOUNDATION, index),
                         modifier = Modifier.onGloballyPositioned {
                             pileLayouts[CardPile(CardPileType.FOUNDATION, index)] = it.boundsInWindow()
                             Log.d("Solitaire", "FoundationPile $index bounds: ${pileLayouts[CardPile(CardPileType.FOUNDATION, index)]}")
@@ -430,11 +431,38 @@ internal fun WastePileView(
 }
 
 @Composable
-fun FoundationPileView(cards: List<Card>, cardWidth: Dp, cardHeight: Dp, modifier: Modifier) {
+fun FoundationPileView(
+    cards: List<Card>,
+    cardWidth: Dp,
+    cardHeight: Dp,
+    modifier: Modifier,
+    isTargeted: Boolean
+) {
     Box(modifier = modifier) {
-        PileView(cards = cards, cardWidth = cardWidth, cardHeight = cardHeight)
+        PileView(
+            cards = cards,
+            cardWidth = cardWidth,
+            cardHeight = cardHeight,
+            modifier = if (isTargeted && cards.isEmpty()) {
+                Modifier.border(2.dp, Color.Yellow)
+            } else {
+                Modifier
+            }
+        )
         cards.lastOrNull()?.let {
-            PlayingCard(card = it, modifier = Modifier.width(cardWidth).height(cardHeight))
+            PlayingCard(
+                card = it,
+                modifier = Modifier
+                    .width(cardWidth)
+                    .height(cardHeight)
+                    .then(
+                        if (isTargeted) {
+                            Modifier.border(2.dp, Color.Yellow)
+                        } else {
+                            Modifier
+                        }
+                    )
+            )
         }
     }
 }
