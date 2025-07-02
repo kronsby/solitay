@@ -84,6 +84,7 @@ fun SolitaireGame(modifier: Modifier = Modifier) {
     val coroutineScope = rememberCoroutineScope()
 
     val pileLayouts = remember { mutableMapOf<CardPile, Rect>() }
+    var targetPile by remember { mutableStateOf<CardPile?>(null) }
 
     val onCardDragStart: (Card, CardPile, Offset, Offset) -> Unit = { card, sourcePile, cardPosition, touchOffset ->
         val draggedCards = when (sourcePile.type) {
@@ -103,29 +104,49 @@ fun SolitaireGame(modifier: Modifier = Modifier) {
     val onCardDrag: (Offset) -> Unit = { delta ->
         coroutineScope.launch {
             dragOffset.snapTo(dragOffset.value + delta)
+            dragInfo?.let { info ->
+                val dropPosition = info.dragStartPositionInWindow + info.touchOffsetOnCard + dragOffset.value
+                targetPile = findDropTarget(dropPosition, pileLayouts)
+            }
         }
     }
 
     val onCardDragEnd: () -> Unit = {
         coroutineScope.launch {
-            dragInfo?.let { info ->
-                val dropPosition = info.dragStartPositionInWindow + info.touchOffsetOnCard + dragOffset.value
-                val targetPile = findDropTarget(dropPosition, pileLayouts)
-
-                if (targetPile != null && isValidMove(info.draggedCards, targetPile, foundations, tableau)) {
-                    performMove(info.draggedCards, info.sourcePile, targetPile, waste, foundations, tableau)
-                    dragInfo = null
-                    dragOffset.snapTo(Offset.Zero)
-                } else {
-                    // Animate back to original position
-                    dragOffset.animateTo(Offset.Zero)
-                    dragInfo = null
+            if (targetPile != null && dragInfo?.let {
+                    isValidMove(
+                        it.draggedCards,
+                        targetPile!!,
+                        foundations,
+                        tableau
+                    )
+                } == true) {
+                dragInfo?.let {
+                    performMove(
+                        it.draggedCards,
+                        it.sourcePile,
+                        targetPile!!,
+                        waste,
+                        foundations,
+                        tableau
+                    )
                 }
+                dragInfo = null
+                dragOffset.snapTo(Offset.Zero)
+            } else {
+                // Animate back to original position
+                dragOffset.animateTo(Offset.Zero)
+                dragInfo = null
             }
+            targetPile = null
         }
     }
-
-    BoxWithConstraints(modifier = modifier.fillMaxSize()) {
+    var boxBoundsInWindow by remember { mutableStateOf<Rect?>(null) }
+    BoxWithConstraints(
+        modifier = modifier
+            .fillMaxSize()
+            .onGloballyPositioned { boxBoundsInWindow = it.boundsInWindow() }
+    ) {
         val cardWidth = (maxWidth - 32.dp) / 7
         val cardHeight = cardWidth * 1.4f
 
@@ -205,12 +226,20 @@ fun SolitaireGame(modifier: Modifier = Modifier) {
                         onCardDragStart = { card, cardPos, touchPos -> onCardDragStart(card, CardPile(CardPileType.TABLEAU, index), cardPos, touchPos) },
                         onCardDrag = onCardDrag,
                         onCardDragEnd = onCardDragEnd,
+                        isTargeted = targetPile == CardPile(CardPileType.TABLEAU, index),
+                        onPlaceholderPositioned = { layoutCoordinates ->
+                            val tableauBounds = layoutCoordinates.boundsInWindow()
+                            pileLayouts[CardPile(CardPileType.TABLEAU, index)] =
+                                boxBoundsInWindow?.let { boxBounds ->
+                                    tableauBounds.copy(bottom = boxBounds.bottom)
+                                } ?: tableauBounds
+                            Log.d(
+                                "Solitaire",
+                                "TableauPile $index bounds: ${pileLayouts[CardPile(CardPileType.TABLEAU, index)]}"
+                            )
+                        },
                         modifier = Modifier
                             .weight(1f)
-                            .onGloballyPositioned {
-                                pileLayouts[CardPile(CardPileType.TABLEAU, index)] = it.boundsInWindow()
-                                Log.d("Solitaire", "TableauPile $index bounds: ${pileLayouts[CardPile(CardPileType.TABLEAU, index)]}")
-                            }
                     )
                 }
             }
@@ -419,10 +448,27 @@ internal fun TableauPileView(
     onCardDragStart: (Card, Offset, Offset) -> Unit,
     onCardDrag: (Offset) -> Unit,
     onCardDragEnd: () -> Unit,
-    modifier: Modifier
+    modifier: Modifier,
+    isTargeted: Boolean,
+    onPlaceholderPositioned: (LayoutCoordinates) -> Unit
 ) {
-    Box(modifier = modifier) {
-        PileView(cards = cards, cardWidth = cardWidth, cardHeight = cardHeight * 2)
+    Box(
+        modifier = modifier
+    ) {
+        PileView(
+            cards = cards,
+            cardWidth = cardWidth,
+            cardHeight = cardHeight * 2,
+            modifier = Modifier
+                .onGloballyPositioned(onPlaceholderPositioned)
+                .then(
+                    if (isTargeted && cards.isEmpty()) {
+                        Modifier.border(2.dp, Color.Yellow)
+                    } else {
+                        Modifier
+                    }
+                )
+        )
         cards.forEachIndexed { index, card ->
             val isBeingDragged = dragInfo?.draggedCards?.contains(card) == true
             var cardPositionInWindow by remember { mutableStateOf(Offset.Zero) }
@@ -440,7 +486,13 @@ internal fun TableauPileView(
                         .pointerInput(card) {
                             if (card.isFaceUp.value) {
                                 detectDragGestures(
-                                    onDragStart = { touchOffset -> onCardDragStart(card, cardPositionInWindow, touchOffset) },
+                                    onDragStart = { touchOffset ->
+                                        onCardDragStart(
+                                            card,
+                                            cardPositionInWindow,
+                                            touchOffset
+                                        )
+                                    },
                                     onDrag = { change, dragAmount ->
                                         change.consume()
                                         onCardDrag(dragAmount)
@@ -450,6 +502,13 @@ internal fun TableauPileView(
                                 )
                             }
                         }
+                        .then(
+                            if (isTargeted && index == cards.lastIndex) {
+                                Modifier.border(2.dp, Color.Yellow)
+                            } else {
+                                Modifier
+                            }
+                        )
                 )
             }
         }
