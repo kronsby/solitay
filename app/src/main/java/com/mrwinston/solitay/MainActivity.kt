@@ -190,9 +190,12 @@ fun SolitaireGame(modifier: Modifier = Modifier) {
                     onStockClick = {
                         val newGameState = gameState.deepCopy()
                         if (newGameState.stock.isNotEmpty()) {
-                            val card = newGameState.stock.removeAt(newGameState.stock.lastIndex)
-                            card.isFaceUp.value = true
-                            newGameState.waste.add(card)
+                            val numToDraw = minOf(3, newGameState.stock.size)
+                            for (i in 0 until numToDraw) {
+                                val card = newGameState.stock.removeAt(newGameState.stock.lastIndex)
+                                card.isFaceUp.value = true
+                                newGameState.waste.add(card)
+                            }
                         } else {
                             newGameState.stock.addAll(newGameState.waste.reversed())
                             newGameState.stock.forEach { it.isFaceUp.value = false }
@@ -220,7 +223,7 @@ fun SolitaireGame(modifier: Modifier = Modifier) {
                     }
                 )
 
-                Spacer(modifier = Modifier.width(16.dp))
+                Spacer(modifier = Modifier.width(24.dp))
 
                 gameState.foundations.forEachIndexed { index, pile ->
                     FoundationPileView(
@@ -431,11 +434,13 @@ internal fun WastePileView(
 ) {
     Box(modifier = modifier) {
         PileView(cards = cards, cardWidth = cardWidth, cardHeight = cardHeight)
-        cards.lastOrNull()?.let { card ->
+        val wasteToDisplay = cards.takeLast(3)
+        wasteToDisplay.forEachIndexed { index, card ->
             val isBeingDragged = dragInfo?.draggedCards?.contains(card) == true
             var cardPositionInWindow by remember { mutableStateOf(Offset.Zero) }
             Box(
                 modifier = Modifier
+                    .offset(x = (index * 15).dp)
                     .onGloballyPositioned { cardPositionInWindow = it.positionInWindow() }
                     .graphicsLayer(alpha = if (isBeingDragged) 0f else 1f)
             ) {
@@ -445,15 +450,23 @@ internal fun WastePileView(
                         .width(cardWidth)
                         .height(cardHeight)
                         .pointerInput(card) {
-                            detectDragGestures(
-                                onDragStart = { touchOffset -> onCardDragStart(card, cardPositionInWindow, touchOffset) },
-                                onDrag = { change, dragAmount ->
-                                    change.consume()
-                                    onCardDrag(dragAmount)
-                                },
-                                onDragEnd = onCardDragEnd,
-                                onDragCancel = onCardDragEnd
-                            )
+                            if (index == wasteToDisplay.lastIndex) {
+                                detectDragGestures(
+                                    onDragStart = { touchOffset ->
+                                        onCardDragStart(
+                                            card,
+                                            cardPositionInWindow,
+                                            touchOffset
+                                        )
+                                    },
+                                    onDrag = { change, dragAmount ->
+                                        change.consume()
+                                        onCardDrag(dragAmount)
+                                    },
+                                    onDragEnd = onCardDragEnd,
+                                    onDragCancel = onCardDragEnd
+                                )
+                            }
                         }
                 )
             }
