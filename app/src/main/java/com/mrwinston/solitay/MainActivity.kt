@@ -11,7 +11,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Scaffold
@@ -27,6 +29,8 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
@@ -213,74 +217,105 @@ fun SolitaireGame(modifier: Modifier = Modifier) {
             modifier = Modifier
                 .fillMaxSize()
                 .background(Color(0xFF2E7D32))
-                .padding(8.dp),
+                .padding(4.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             // Top Row: Stock, Waste, Foundations
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                StockPileView(
-                    cards = gameState.stock,
-                    cardWidth = cardWidth,
-                    cardHeight = cardHeight,
-                    onStockClick = {
-                        val newGameState = gameState.deepCopy()
-                        if (newGameState.stock.isNotEmpty()) {
-                            val numToDraw = minOf(3, newGameState.stock.size)
-                            for (i in 0 until numToDraw) {
-                                val card = newGameState.stock.removeAt(newGameState.stock.lastIndex)
-                                card.isFaceUp.value = true
-                                newGameState.waste.add(card)
-                            }
-                        } else {
-                            newGameState.stock.addAll(newGameState.waste.reversed())
-                            newGameState.stock.forEach { it.isFaceUp.value = false }
-                            newGameState.waste.clear()
-                        }
-                        updateGameState(newGameState)
-                    },
-                    modifier = Modifier.onGloballyPositioned {
-                        pileLayouts[CardPile(CardPileType.STOCK)] = it.boundsInWindow()
-                        Log.d("Solitaire", "StockPile bounds: ${pileLayouts[CardPile(CardPileType.STOCK)]}")
-                    }
-                )
-
-                WastePileView(
-                    cards = gameState.waste,
-                    cardWidth = cardWidth,
-                    cardHeight = cardHeight,
-                    dragInfo = dragInfo,
-                    onCardDragStart = { card, cardPos, touchPos -> onCardDragStart(card, CardPile(CardPileType.WASTE), cardPos, touchPos) },
-                    onCardDrag = onCardDrag,
-                    onCardDragEnd = onCardDragEnd,
-                    modifier = Modifier.onGloballyPositioned {
-                        pileLayouts[CardPile(CardPileType.WASTE)] = it.boundsInWindow()
-                        Log.d("Solitaire", "WastePile bounds: ${pileLayouts[CardPile(CardPileType.WASTE)]}")
-                    }
-                )
-
-                Spacer(modifier = Modifier.width(16.dp))
-
-                gameState.foundations.forEachIndexed { index, pile ->
-                    FoundationPileView(
-                        cards = pile,
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    StockPileView(
+                        cards = gameState.stock,
                         cardWidth = cardWidth,
                         cardHeight = cardHeight,
-                        isTargeted = targetPile == CardPile(CardPileType.FOUNDATION, index),
+                        onStockClick = {
+                            val newGameState = gameState.deepCopy()
+                            if (newGameState.stock.isNotEmpty()) {
+                                val numToDraw = minOf(3, newGameState.stock.size)
+                                for (i in 0 until numToDraw) {
+                                    val card =
+                                        newGameState.stock.removeAt(newGameState.stock.lastIndex)
+                                    card.isFaceUp.value = true
+                                    newGameState.waste.add(card)
+                                }
+                            } else {
+                                newGameState.stock.addAll(newGameState.waste.reversed())
+                                newGameState.stock.forEach { it.isFaceUp.value = false }
+                                newGameState.waste.clear()
+                            }
+                            updateGameState(newGameState)
+                        },
                         modifier = Modifier.onGloballyPositioned {
-                            pileLayouts[CardPile(CardPileType.FOUNDATION, index)] = it.boundsInWindow()
-                            Log.d("Solitaire", "FoundationPile $index bounds: ${pileLayouts[CardPile(CardPileType.FOUNDATION, index)]}")
+                            pileLayouts[CardPile(CardPileType.STOCK)] = it.boundsInWindow()
+                            Log.d(
+                                "Solitaire",
+                                "StockPile bounds: ${pileLayouts[CardPile(CardPileType.STOCK)]}"
+                            )
                         }
                     )
+
+                    WastePileView(
+                        cards = gameState.waste,
+                        cardWidth = cardWidth,
+                        cardHeight = cardHeight,
+                        dragInfo = dragInfo,
+                        onCardDragStart = { card, cardPos, touchPos ->
+                            onCardDragStart(
+                                card,
+                                CardPile(CardPileType.WASTE),
+                                cardPos,
+                                touchPos
+                            )
+                        },
+                        onCardDrag = onCardDrag,
+                        onCardDragEnd = onCardDragEnd,
+                        modifier = Modifier.onGloballyPositioned {
+                            pileLayouts[CardPile(CardPileType.WASTE)] = it.boundsInWindow()
+                            Log.d(
+                                "Solitaire",
+                                "WastePile bounds: ${pileLayouts[CardPile(CardPileType.WASTE)]}"
+                            )
+                        }
+                    )
+                }
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    gameState.foundations.forEachIndexed { index, pile ->
+                        FoundationPileView(
+                            cards = pile,
+                            cardWidth = cardWidth,
+                            cardHeight = cardHeight,
+                            isTargeted = targetPile == CardPile(CardPileType.FOUNDATION, index),
+                            modifier = Modifier.onGloballyPositioned {
+                                pileLayouts[CardPile(CardPileType.FOUNDATION, index)] =
+                                    it.boundsInWindow()
+                                Log.d(
+                                    "Solitaire",
+                                    "FoundationPile $index bounds: ${
+                                        pileLayouts[CardPile(
+                                            CardPileType.FOUNDATION,
+                                            index
+                                        )]
+                                    }"
+                                )
+                            }
+                        )
+                    }
                 }
             }
 
             // Bottom Row: Tableau
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 gameState.tableau.forEachIndexed { index, pile ->
                     TableauPileView(
@@ -465,7 +500,19 @@ private fun PileView(modifier: Modifier = Modifier, cards: List<Card>, cardWidth
         contentAlignment = Alignment.Center
     ) {
         if (cards.isEmpty()) {
-            Text("Empty", color = Color.White.copy(alpha = 0.5f))
+            val density = LocalDensity.current
+            // Calculate a suitable font size based on the cardWidth
+            // You might need to adjust the multiplier (e.g., 0.6f) to find what works best for your design
+            val fontSize = with(density) { (cardWidth.toPx() * 0.25f).toSp() }
+
+            Text(
+                "Empty",
+                color = Color.White.copy(alpha = 0.5f),
+                fontSize = fontSize,
+                maxLines = 1,
+                softWrap = false,
+                overflow = TextOverflow.Ellipsis
+            )
         }
     }
 }
