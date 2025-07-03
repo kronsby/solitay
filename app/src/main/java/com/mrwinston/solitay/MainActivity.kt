@@ -1,5 +1,6 @@
 package com.mrwinston.solitay
 
+import android.graphics.Rect as AndroidRect
 import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
@@ -19,6 +20,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.composed
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
@@ -28,11 +30,13 @@ import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
+import androidx.core.view.WindowCompat
 import com.mrwinston.solitay.model.Card
 import com.mrwinston.solitay.model.GameState
 import com.mrwinston.solitay.model.Rank
@@ -45,6 +49,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        WindowCompat.setDecorFitsSystemWindows(window, false)
         setContent {
             SolitaireTheme {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
@@ -86,6 +91,7 @@ fun SolitaireGame(modifier: Modifier = Modifier) {
 
     val pileLayouts = remember { mutableMapOf<CardPile, Rect>() }
     var targetPile by remember { mutableStateOf<CardPile?>(null) }
+    var gestureExclusionRect by remember { mutableStateOf<Rect?>(null) }
 
     val history = remember { mutableStateListOf(gameState) }
     var historyIndex by remember { mutableIntStateOf(0) }
@@ -207,9 +213,11 @@ fun SolitaireGame(modifier: Modifier = Modifier) {
         modifier = modifier
             .fillMaxSize()
             .onGloballyPositioned { boxBoundsInWindow = it.boundsInWindow() }
+            .systemGestureExclusion(listOfNotNull(gestureExclusionRect))
     ) {
         val cardWidth = (maxWidth - 32.dp) / 7
         val cardHeight = cardWidth * 1.4f
+        val view = LocalView.current
 
         Column(
             modifier = Modifier
@@ -311,7 +319,17 @@ fun SolitaireGame(modifier: Modifier = Modifier) {
 
             // Bottom Row: Tableau
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .onGloballyPositioned { layoutCoordinates ->
+                        val windowBounds = layoutCoordinates.boundsInWindow()
+                        gestureExclusionRect = Rect(
+                            left = 0f,
+                            top = windowBounds.top,
+                            right = view.width.toFloat(),
+                            bottom = windowBounds.top + 1000f
+                        )
+                    },
                 horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 gameState.tableau.forEachIndexed { index, pile ->
@@ -508,7 +526,7 @@ private fun PileView(modifier: Modifier = Modifier, cards: List<Card>, cardWidth
                 fontSize = fontSize,
                 maxLines = 1,
                 softWrap = false,
-                overflow = TextOverflow.Ellipsis
+                overflow = TextOverflow.Ellipsis // This will add "..." if text still overflows after scaling
             )
         }
     }
@@ -694,4 +712,14 @@ private fun LayoutCoordinates.boundsInWindow(): Rect {
     val position = positionInWindow()
     val size = size
     return Rect(position.x, position.y, position.x + size.width, position.y + size.height)
+}
+
+fun Modifier.systemGestureExclusion(exclusionRects: List<Rect>) = composed {
+    val view = LocalView.current
+    LaunchedEffect(view, exclusionRects) {
+        view.systemGestureExclusionRects = exclusionRects.map {
+            AndroidRect(it.left.toInt(), it.top.toInt(), it.right.toInt(), it.bottom.toInt())
+        }
+    }
+    this
 }
