@@ -12,6 +12,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -107,7 +108,7 @@ fun SolitaireGame(modifier: Modifier = Modifier) {
                 val cardIndex = pile.indexOf(card)
                 if (cardIndex != -1) pile.subList(cardIndex, pile.size).toList() else emptyList()
             }
-            CardPileType.WASTE -> listOf(card)
+            CardPileType.WASTE, CardPileType.FOUNDATION -> listOf(card)
             else -> emptyList()
         }
         if (draggedCards.isNotEmpty()) {
@@ -134,6 +135,26 @@ fun SolitaireGame(modifier: Modifier = Modifier) {
         historyIndex++
         if (checkWinCondition(newState)) {
             isGameWon = true
+        }
+    }
+
+    val onCardTap: (Card, CardPile) -> Unit = { card, sourcePile ->
+        val draggedCards = when (sourcePile.type) {
+            CardPileType.TABLEAU -> {
+                val pile = gameState.tableau[sourcePile.index]
+                val cardIndex = pile.indexOf(card)
+                if (cardIndex != -1) pile.subList(cardIndex, pile.size) else emptyList()
+            }
+            CardPileType.WASTE, CardPileType.FOUNDATION -> listOf(card)
+            else -> emptyList()
+        }
+
+        if (draggedCards.isNotEmpty()) {
+            val validMoves = findValidMoves(draggedCards, gameState)
+            if (validMoves.size == 1) {
+                val newGameState = performMove(gameState, draggedCards, sourcePile, validMoves.first())
+                updateGameState(newGameState)
+            }
         }
     }
 
@@ -271,6 +292,7 @@ fun SolitaireGame(modifier: Modifier = Modifier) {
                         cardWidth = cardWidth,
                         cardHeight = cardHeight,
                         dragInfo = dragInfo,
+                        onCardTap = { onCardTap(it, CardPile(CardPileType.WASTE)) },
                         onCardDragStart = { card, cardPos, touchPos ->
                             onCardDragStart(
                                 card,
@@ -298,7 +320,19 @@ fun SolitaireGame(modifier: Modifier = Modifier) {
                             cards = pile,
                             cardWidth = cardWidth,
                             cardHeight = cardHeight,
+                            dragInfo = dragInfo,
                             isTargeted = targetPile == CardPile(CardPileType.FOUNDATION, index),
+                            onCardTap = { onCardTap(it, CardPile(CardPileType.FOUNDATION, index)) },
+                            onCardDragStart = { card, cardPos, touchPos ->
+                                onCardDragStart(
+                                    card,
+                                    CardPile(CardPileType.FOUNDATION, index),
+                                    cardPos,
+                                    touchPos
+                                )
+                            },
+                            onCardDrag = onCardDrag,
+                            onCardDragEnd = onCardDragEnd,
                             modifier = Modifier.onGloballyPositioned {
                                 pileLayouts[CardPile(CardPileType.FOUNDATION, index)] =
                                     it.boundsInWindow()
@@ -338,6 +372,7 @@ fun SolitaireGame(modifier: Modifier = Modifier) {
                         cardWidth = cardWidth,
                         cardHeight = cardHeight,
                         dragInfo = dragInfo,
+                        onCardTap = { onCardTap(it, CardPile(CardPileType.TABLEAU, index)) },
                         onCardDragStart = { card, cardPos, touchPos -> onCardDragStart(card, CardPile(CardPileType.TABLEAU, index), cardPos, touchPos) },
                         onCardDrag = onCardDrag,
                         onCardDragEnd = onCardDragEnd,
@@ -424,6 +459,26 @@ fun SolitaireGame(modifier: Modifier = Modifier) {
     }
 }
 
+private fun findValidMoves(draggedCards: List<Card>, gameState: GameState): List<CardPile> {
+    val validMoves = mutableListOf<CardPile>()
+
+    // Check foundation piles
+    for (i in gameState.foundations.indices) {
+        if (isValidMove(draggedCards, CardPile(CardPileType.FOUNDATION, i), gameState.foundations, gameState.tableau)) {
+            validMoves.add(CardPile(CardPileType.FOUNDATION, i))
+        }
+    }
+
+    // Check tableau piles
+    for (i in gameState.tableau.indices) {
+        if (isValidMove(draggedCards, CardPile(CardPileType.TABLEAU, i), gameState.foundations, gameState.tableau)) {
+            validMoves.add(CardPile(CardPileType.TABLEAU, i))
+        }
+    }
+
+    return validMoves
+}
+
 private fun findDropTarget(dragPosition: Offset, layouts: Map<CardPile, Rect>): CardPile? {
     Log.d("Solitaire", "findDropTarget: dragPosition=$dragPosition")
     val target = layouts.entries
@@ -479,6 +534,7 @@ private fun performMove(
     val sourceList = when (sourcePile.type) {
         CardPileType.WASTE -> newGameState.waste
         CardPileType.TABLEAU -> newGameState.tableau[sourcePile.index]
+        CardPileType.FOUNDATION -> newGameState.foundations[sourcePile.index]
         else -> return newGameState // Should not happen
     }
 
@@ -548,6 +604,7 @@ internal fun WastePileView(
     cardWidth: Dp,
     cardHeight: Dp,
     dragInfo: DragInfo?,
+    onCardTap: (Card) -> Unit,
     onCardDragStart: (Card, Offset, Offset) -> Unit,
     onCardDrag: (Offset) -> Unit,
     onCardDragEnd: () -> Unit,
@@ -570,6 +627,9 @@ internal fun WastePileView(
                     modifier = Modifier
                         .width(cardWidth)
                         .height(cardHeight)
+                        .pointerInput(card) {
+                            detectTapGestures(onTap = { onCardTap(card) })
+                        }
                         .pointerInput(card) {
                             if (index == wasteToDisplay.lastIndex) {
                                 detectDragGestures(
@@ -596,12 +656,17 @@ internal fun WastePileView(
 }
 
 @Composable
-fun FoundationPileView(
+internal fun FoundationPileView(
     cards: List<Card>,
     cardWidth: Dp,
     cardHeight: Dp,
+    dragInfo: DragInfo?,
     modifier: Modifier,
-    isTargeted: Boolean
+    isTargeted: Boolean,
+    onCardTap: (Card) -> Unit,
+    onCardDragStart: (Card, Offset, Offset) -> Unit,
+    onCardDrag: (Offset) -> Unit,
+    onCardDragEnd: () -> Unit
 ) {
     Box(modifier = modifier) {
         PileView(
@@ -614,12 +679,36 @@ fun FoundationPileView(
                 Modifier
             }
         )
-        cards.lastOrNull()?.let {
+        cards.lastOrNull()?.let { card ->
+            val isBeingDragged = dragInfo?.draggedCards?.contains(card) == true
+            var cardPositionInWindow by remember { mutableStateOf(Offset.Zero) }
             PlayingCard(
-                card = it,
+                card = card,
                 modifier = Modifier
                     .width(cardWidth)
                     .height(cardHeight)
+                    .onGloballyPositioned { cardPositionInWindow = it.positionInWindow() }
+                    .graphicsLayer(alpha = if (isBeingDragged) 0f else 1f)
+                    .pointerInput(card) {
+                        detectTapGestures(onTap = { onCardTap(card) })
+                    }
+                    .pointerInput(card) {
+                        detectDragGestures(
+                            onDragStart = { touchOffset ->
+                                onCardDragStart(
+                                    card,
+                                    cardPositionInWindow,
+                                    touchOffset
+                                )
+                            },
+                            onDrag = { change, dragAmount ->
+                                change.consume()
+                                onCardDrag(dragAmount)
+                            },
+                            onDragEnd = onCardDragEnd,
+                            onDragCancel = onCardDragEnd
+                        )
+                    }
                     .then(
                         if (isTargeted) {
                             Modifier.border(2.dp, Color.Yellow)
@@ -638,6 +727,7 @@ internal fun TableauPileView(
     cardWidth: Dp,
     cardHeight: Dp,
     dragInfo: DragInfo?,
+    onCardTap: (Card) -> Unit,
     onCardDragStart: (Card, Offset, Offset) -> Unit,
     onCardDrag: (Offset) -> Unit,
     onCardDragEnd: () -> Unit,
@@ -676,6 +766,9 @@ internal fun TableauPileView(
                     modifier = Modifier
                         .width(cardWidth)
                         .height(cardHeight)
+                        .pointerInput(card) {
+                            detectTapGestures(onTap = { onCardTap(card) })
+                        }
                         .pointerInput(card) {
                             if (card.isFaceUp.value) {
                                 detectDragGestures(
