@@ -12,6 +12,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -74,6 +75,8 @@ internal data class CardPile(
 @Composable
 fun SolitaireGame(modifier: Modifier = Modifier) {
     var gameState by remember { mutableStateOf(GameState()) }
+    var isGameWon by remember { mutableStateOf(false) }
+    var showNewGameDialog by remember { mutableStateOf(false) }
 
     var dragInfo by remember { mutableStateOf<DragInfo?>(null) }
     val dragOffset = remember { Animatable(Offset.Zero, Offset.VectorConverter) }
@@ -83,7 +86,11 @@ fun SolitaireGame(modifier: Modifier = Modifier) {
     var targetPile by remember { mutableStateOf<CardPile?>(null) }
 
     val history = remember { mutableStateListOf(gameState) }
-    var historyIndex by remember { mutableStateOf(0) }
+    var historyIndex by remember { mutableIntStateOf(0) }
+
+    fun checkWinCondition(state: GameState): Boolean {
+        return state.foundations.all { it.size == 13 }
+    }
 
     val onCardDragStart: (Card, CardPile, Offset, Offset) -> Unit = { card, sourcePile, cardPosition, touchOffset ->
         val draggedCards = when (sourcePile.type) {
@@ -117,6 +124,9 @@ fun SolitaireGame(modifier: Modifier = Modifier) {
         }
         history.add(newState)
         historyIndex++
+        if (checkWinCondition(newState)) {
+            isGameWon = true
+        }
     }
 
     val onCardDragEnd: () -> Unit = {
@@ -148,6 +158,16 @@ fun SolitaireGame(modifier: Modifier = Modifier) {
         }
     }
 
+    val newGame: () -> Unit = {
+        val newGameState = GameState()
+        gameState = newGameState
+        history.clear()
+        history.add(newGameState)
+        historyIndex = 0
+        isGameWon = false
+        showNewGameDialog = false
+    }
+
     val undo: () -> Unit = {
         if (historyIndex > 0) {
             historyIndex--
@@ -160,6 +180,24 @@ fun SolitaireGame(modifier: Modifier = Modifier) {
             historyIndex++
             gameState = history[historyIndex]
         }
+    }
+
+    if (showNewGameDialog) {
+        AlertDialog(
+            onDismissRequest = { showNewGameDialog = false },
+            title = { Text("Start a New Game?") },
+            text = { Text("Please confirm you want to start a new game, your current game will be lost forever?") },
+            confirmButton = {
+                Button(onClick = newGame) {
+                    Text("That game was too hard, give me a new one")
+                }
+            },
+            dismissButton = {
+                Button(onClick = { showNewGameDialog = false }) {
+                    Text("Oh shit, I shouldn't have hit that")
+                }
+            }
+        )
     }
 
     var boxBoundsInWindow by remember { mutableStateOf<Rect?>(null) }
@@ -223,7 +261,7 @@ fun SolitaireGame(modifier: Modifier = Modifier) {
                     }
                 )
 
-                Spacer(modifier = Modifier.width(24.dp))
+                Spacer(modifier = Modifier.width(16.dp))
 
                 gameState.foundations.forEachIndexed { index, pile ->
                     FoundationPileView(
@@ -303,13 +341,34 @@ fun SolitaireGame(modifier: Modifier = Modifier) {
                 .fillMaxWidth()
                 .align(Alignment.BottomCenter)
                 .padding(16.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly
+            horizontalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterHorizontally)
         ) {
             Button(onClick = undo, enabled = historyIndex > 0) {
                 Text("Undo")
             }
+            Button(onClick = { showNewGameDialog = true }) {
+                Text("New Game")
+            }
             Button(onClick = redo, enabled = historyIndex < history.lastIndex) {
                 Text("Redo")
+            }
+        }
+
+        if (isGameWon) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.6f))
+                    .zIndex(20f),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("You Win!", color = Color.White)
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Button(onClick = { showNewGameDialog = true }) {
+                        Text("New Game")
+                    }
+                }
             }
         }
     }
